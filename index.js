@@ -27,17 +27,31 @@
  * @author  Anders Evenrud <andersevenrud@gmail.com>
  * @licence Simplified BSD License
  */
+const path = require('path');
+const mime = require('mime');
+const FTP = require('promise-ftp');
+
+const getPath = dir => dir.split(':').splice(1).join(':');
+const getConnectionId = conn => `${conn.user}@${conn.host}:${conn.secure}`;
 
 /**
  * VFS Adapter Abstraction
  */
 class FTPConnection {
 
-  constructor(adapter, vfs) {
+  constructor(adapter, options) {
     this.adapter = adapter;
-    this.vfs = vfs;
-    this.connection = null; // TODO
+    this.id = getConnectionId(options);
+    this.options = Object.assign({
+      host: '',
+      user: '',
+      password: '',
+      secure: false
+    }, options);
 
+    this.connection = new FTP({
+      timeout: 0
+    });
   }
 
   destroy() {
@@ -45,58 +59,85 @@ class FTPConnection {
   }
 
   connect() {
-    // TODO
-    // this.vfs.mount.attributes.connection has the connection infromation from client / server
-    return Promise.resolve();
+    // FIXME: Does the connected attribute change when connection is dropped ?
+    return this.connection.rawClient.connected
+      ? Promise.resolve(this.connection)
+      : this.connection.connect(this.options);
   }
 
   disconnect() {
-    // TODO
-    return Promise.resolve();
+    return this.connection.end();
   }
 
   exists(file) {
-    return Promise.reject('Not implemented');
+    return this.readdir(path.dirname(getPath(file)))
+      .then(list => !!list.find(iter => iter.path === file));
   }
 
   stat(file) {
+    // TODO: Just use readdir iter
     return Promise.reject('Not implemented');
   }
 
   readdir(file) {
-    return Promise.reject('Not implemented');
+    // FIXME: Symlinks
+    return this.connection.list(getPath(file))
+      .then(list => {
+        return list.map(iter => {
+          const isFile = iter.type !== 'd';
+
+          return {
+            isFile,
+            isDirectory: !isFile,
+            mime: isFile ? mime.getType(iter.name) : null,
+            size: iter.size,
+            path: `${file.replace(/\/$/, '')}/${iter.name}`,
+            filename: iter.name,
+            stat: {/* TODO */}
+          };
+        });
+      });
   }
 
   readfile(file, options = {}) {
-    return Promise.reject('Not implemented');
+    return this.connection.get(getPath(file));
   }
 
   mkdir(file) {
-    return Promise.reject('Not implemented');
+    return this.connection.mkdir(getPath(file));
   }
 
   writefile(file, data) {
-    return Promise.reject('Not implemented');
+    return this.connection.put(data, getPath(file));
   }
 
   rename(src, dest) {
-    return Promise.reject('Not implemented');
+    return this.connection.rename(getPath(src), getPath(dest));
   }
 
   copy(src, dest) {
-    return Promise.reject('Not implemented');
+    return this.readfile(src)
+      .then(data => this.writefile(dest, data));
   }
 
   unlink(file) {
-    return Promise.reject('Not implemented');
+    return this.readdir(path.dirname(getPath(file)))
+      .then(list => list.find(iter => iter.path === file))
+      .then(found => {
+        if (found && found.isDirectory) {
+          return this.connection.rmdir(getPath(file), true);
+        }
+
+        return this.connection.delete(getPath(file));
+      });
   }
 
   search(root, pattern) {
-    return Promise.reject('Not implemented');
+    return Promise.reject('Not supported');
   }
 
   touch(file) {
-    return Promise.reject('Not implemented');
+    return this.writefile(file, new ArrayBuffer());
   }
 }
 
@@ -119,33 +160,38 @@ class FTPAdapter {
     });
   }
 
-  createConnection(vfs) {
-    // TODO
-    return new FTPConnection(this, vfs);
-    /*
-    const c = new FTPConnection(this, vfs);
+  createConnection(options) {
+    // TODO: Listen for event to remove automatically
+    const c = new FTPConnection(this, options);
 
     this.pool.push(c);
 
     return c;
-    */
   }
 
-  removeConnection() {
-    // TODO
-    const foundIndex = this.pool.findIndex(iter => false);
+  removeConnection(id) {
+    const foundIndex = this.pool.findIndex(iter => iter.id === id);
     if (foundIndex !== -1) {
       if (this.pool[foundIndex]) {
         this.pool[foundIndex].destroy();
       }
 
       this.pool.splice(foundIndex, 1);
+
+      return true;
     }
+
+    return false;
   }
 
   getConnection(vfs) {
-    // TODO
-    return this.createConnection(vfs);
+    const options = vfs.mount.attributes.connection;
+    const id = getConnectionId(options);
+    const found = this.pool.find(iter => iter.id === id);
+    const connection = found ? found : this.createConnection(options);
+
+    return connection.connect()
+      .then(() => connection);
   }
 }
 
@@ -158,7 +204,8 @@ const adapter = core => {
   // This will forward all calls to a FTPConnection
   const proxy = new Proxy({}, {
     get: (obj, prop) => {
-      return vfs => (...args) => a.getConnection(vfs)[prop](...args);
+      return vfs => (...args) => a.getConnection(vfs)
+        .then(conn => conn[prop](...args));
     }
   });
 

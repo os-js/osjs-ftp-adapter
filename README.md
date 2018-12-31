@@ -13,7 +13,7 @@
 
 This is the FTP VFS (Server) Adapter for OS.js v3.
 
-**AT THE MOMENT THIS DOES NOTHING -- JUST A WORK IN PROGRESS**
+**THIS IS A WORK IN PROGRESS**
 
 ## Installation
 
@@ -41,10 +41,9 @@ Then create a mountpoint:
       attributes: {
         connection: {
           host: 'localhost',
-          port: 21,
-          username: 'osjs',
+          user: 'osjs',
           password: 'osjs',
-          type: 'ftp'
+          secure: false
         }
       }
      }]
