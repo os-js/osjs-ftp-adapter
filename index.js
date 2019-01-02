@@ -70,13 +70,15 @@ class FTPConnection {
   }
 
   exists(file) {
-    return this.readdir(path.dirname(getPath(file)))
-      .then(list => !!list.find(iter => iter.path === file));
+    return this.stat(file)
+      .then(stat => !!stat);
   }
 
   stat(file) {
-    // TODO: Just use readdir iter
-    return Promise.reject('Not implemented');
+    const filename = path.basename(getPath(file));
+
+    return this.readdir(path.dirname(file))
+      .then(list => list.find(iter => iter.filename === filename));
   }
 
   readdir(file) {
@@ -117,13 +119,17 @@ class FTPConnection {
 
   copy(src, dest) {
     return this.readfile(src)
-      .then(data => this.writefile(dest, data));
+      .then(data => this.writefile(dest, data))
+      .then(() => true);
   }
 
   unlink(file) {
-    return this.readdir(path.dirname(getPath(file)))
-      .then(list => list.find(iter => iter.path === file))
+    return this.stat(file)
       .then(found => {
+        if (!found) {
+          return Promise.reject(new Error('File not found'));
+        }
+
         if (found && found.isDirectory) {
           return this.connection.rmdir(getPath(file), true);
         }
@@ -137,7 +143,8 @@ class FTPConnection {
   }
 
   touch(file) {
-    return this.writefile(file, new ArrayBuffer());
+    return this.writefile(file, '')
+      .then(() => true);
   }
 }
 
