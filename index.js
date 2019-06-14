@@ -58,6 +58,10 @@ class FTPConnection {
     this.disconnect();
   }
 
+  clone() {
+    return new FTPConnection(this.adapter, this.options);
+  }
+
   connect() {
     // FIXME: Does the connected attribute change when connection is dropped ?
     return this.connection.rawClient.connected
@@ -119,7 +123,18 @@ class FTPConnection {
 
   copy(src, dest) {
     return this.readfile(src)
-      .then(data => this.writefile(dest, data))
+      .then(data => {
+        const newConnection = this.clone();
+        const wrap = r => {
+          newConnection.destroy();
+          return r;
+        };
+
+        return newConnection.connect()
+          .then(() => newConnection.writefile(dest, data))
+          .then(wrap)
+          .catch(wrap);
+      })
       .then(() => true);
   }
 
