@@ -19,6 +19,10 @@ This is the FTP VFS (Server) Adapter for OS.js v3.
 
 ## Installation
 
+```
+npm install @osjs/ftp-adapter
+```
+
 ## Usage
 
 In your `src/server/index.js` bootstrap file:
