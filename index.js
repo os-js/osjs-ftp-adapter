@@ -239,7 +239,7 @@ const adapter = core => {
     unlink: wrap('unlink'),
     search: wrap('search'),
     touch: wrap('touch')
-  }
+  };
 
   core.on('osjs/core:destroy', () => a.destroy());
 

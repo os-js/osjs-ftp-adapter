@@ -1,6 +1,6 @@
 {
   "name": "@osjs/ftp-adapter",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "FTP VFS Adapter for OS.js",
   "main": "index.js",
   "scripts": {
