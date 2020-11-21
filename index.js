@@ -223,13 +223,23 @@ class FTPAdapter {
 const adapter = core => {
   const a = new FTPAdapter(core);
 
-  // This will forward all calls to a FTPConnection
-  const proxy = new Proxy({}, {
-    get: (obj, prop) => {
-      return vfs => (...args) => a.getConnection(vfs)
-        .then(conn => conn[prop](...args));
-    }
-  });
+  const wrap = name => vfs => (...args) =>
+    a.getConnection(vfs)
+      .then(conn => conn[name](...args));
+
+  const proxy = {
+    exists: wrap('exists'),
+    stat: wrap('stat'),
+    readdir: wrap('readdir'),
+    readfile: wrap('readfile'),
+    mkdir: wrap('mkdir'),
+    writefile: wrap('writefile'),
+    rename: wrap('rename'),
+    copy: wrap('copy'),
+    unlink: wrap('unlink'),
+    search: wrap('search'),
+    touch: wrap('touch')
+  }
 
   core.on('osjs/core:destroy', () => a.destroy());
 
