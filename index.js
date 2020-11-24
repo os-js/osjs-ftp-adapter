@@ -31,7 +31,7 @@ const path = require('path');
 const mime = require('mime');
 const FTP = require('promise-ftp');
 
-const getPath = dir => dir.split(':').splice(1).join(':');
+const getPath = dir => dir.split(':').splice(1).join('');
 const getConnectionId = conn => `${conn.user}@${conn.host}:${conn.secure}`;
 
 /**
@@ -79,7 +79,8 @@ class FTPConnection {
   }
 
   stat(file) {
-    const filename = path.basename(getPath(file));
+    const ppath = getPath(file);
+    const filename = path.basename(ppath);
 
     return this.readdir(path.dirname(file))
       .then(list => list.find(iter => iter.filename === filename));
@@ -223,9 +224,13 @@ class FTPAdapter {
 const adapter = core => {
   const a = new FTPAdapter(core);
 
-  const wrap = name => vfs => (...args) =>
-    a.getConnection(vfs)
-      .then(conn => conn[name](...args));
+  const wrap = name => vfs => (...args) => {
+    const conn = new FTPConnection(a, vfs.mount.attributes.connection);
+    return conn
+      .connect()
+      .then(() => conn[name](...args))
+      .finally(() => a.destroy());
+  };
 
   const proxy = {
     exists: wrap('exists'),
